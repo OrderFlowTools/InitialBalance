@@ -9,3 +9,14 @@ Simple IB+OR indicator for Ninjatrader v8.
 - Displays Opening Range (OR) (30 seconds)
 
 _Note: All time configuration values are considered local time._
+
+# Screenshots
+
+### Displaying IB + OR + SessionMid 
+![IB_OR_SessionMid](https://github.com/OrderFlowTools/screenshots/blob/main/ib/ib_or_sessmid.png)
+
+### IB Parameters
+![IB_Params](https://github.com/OrderFlowTools/screenshots/blob/main/ib/ibx_params.png)
+
+### IB Custom Extensions
+![IB_Custom_Extensions](https://github.com/OrderFlowTools/screenshots/blob/main/ib/ibx.png)
