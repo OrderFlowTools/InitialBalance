@@ -2,6 +2,7 @@
 using NinjaTrader.Cbi;
 using NinjaTrader.Data;
 using NinjaTrader.Gui;
+using NinjaTrader.Gui.Chart;
 using NinjaTrader.Gui.Tools;
 using NinjaTrader.NinjaScript.DrawingTools;
 using System;
@@ -23,6 +24,7 @@ namespace NinjaTrader.NinjaScript.Indicators.Gemify
     [Gui.CategoryOrder("Initial Balance Period", 4)]
     [Gui.CategoryOrder("Options", 5)]
     [Gui.CategoryOrder("Colors", 6)]
+    [Gui.CategoryOrder("Margin Marker Colors", 7)]
     public class InitialBalance : Indicator
 	{
 		private double IBHigh;
@@ -34,6 +36,14 @@ namespace NinjaTrader.NinjaScript.Indicators.Gemify
 		private int IBStartBar;
 
 		private bool IBComplete;
+
+        private double IBX1Upper;
+        private double IBX1Lower;
+        private double IBX2Upper;
+        private double IBX2Lower;
+        private double IBX3Upper;
+        private double IBX3Lower;
+
         private List<double> Ranges;
 
         private double ORHigh;
@@ -42,6 +52,7 @@ namespace NinjaTrader.NinjaScript.Indicators.Gemify
 
         private double SessionHigh;
         private double SessionLow;
+        private double SessionMiddle;
 
         private SessionIterator sessionIterator;
 
@@ -86,6 +97,7 @@ namespace NinjaTrader.NinjaScript.Indicators.Gemify
 
                 DisplayIBRange = true;
 				HighlightIBPeriod = true;
+                DisplayMarginMarkers = true;
 
                 IBStartBar = -1;
 				IBComplete = false;
@@ -126,12 +138,23 @@ namespace NinjaTrader.NinjaScript.Indicators.Gemify
                 IBX3DashStyle = DashStyleHelper.Dash;
                 IBX3Width = 1;
 
+                MarginMarkerTextBrush = Brushes.White;
+                MarginMarkerFillBrush = Brushes.Maroon;
+                MarginMarkerBorderBrush = Brushes.AliceBlue;
+
             }
             else if (State == State.Configure)
 			{
 				Debug("Adding Seconds Data Series");
-				// Add seconds based bars to determine Initial Balance
-                AddDataSeries(BarsPeriodType.Second, 30);
+                if (DisplayOR)
+                {
+                    // Add seconds based bars to determine Initial Balance
+                    AddDataSeries(BarsPeriodType.Second, 30);
+                }
+                else
+                {
+                    AddDataSeries(BarsPeriodType.Minute, 1);
+                }
 
                 AddPlot(Brushes.Transparent, "IBH");
                 AddPlot(Brushes.Transparent, "IBMid");
@@ -169,6 +192,7 @@ namespace NinjaTrader.NinjaScript.Indicators.Gemify
 
             // Get current time and use that to calculate today's OR Start/End times
             DateTime now = Times[1][0]; // 30 second bar based time
+
             DateTime StartTime = new DateTime(now.Year, now.Month, now.Day, IBStartTime.Hour, IBStartTime.Minute, IBStartTime.Second, DateTimeKind.Local);
             DateTime EndTime = new DateTime(now.Year, now.Month, now.Day, IBEndTime.Hour, IBEndTime.Minute, IBEndTime.Second, DateTimeKind.Local);
             // Add 30 seconds to the start time
@@ -181,11 +205,10 @@ namespace NinjaTrader.NinjaScript.Indicators.Gemify
             if (!(StartTime <= now && now <= TodaySessionEndTime)) return;
 
             // Session mid value
-            // SessionMid[0] = Instrument.MasterInstrument.RoundToTickSize(Low[LowestBar(Low, Bars.BarsSinceNewTradingDay)] + High[HighestBar(High, Bars.BarsSinceNewTradingDay)] / 2.0);
             SessionHigh = Math.Max(SessionHigh, High[0]);
             SessionLow = Math.Min(SessionLow, Low[0]);
-            double sessionMid = Instrument.MasterInstrument.RoundToTickSize((SessionHigh + SessionLow) / 2.0);
-            Debug("SessionMid is " + sessionMid);
+            SessionMiddle = Instrument.MasterInstrument.RoundToTickSize((SessionHigh + SessionLow) / 2.0);
+            Debug("SessionMid is " + SessionMiddle);
 
             // Flag that indicates that IB is complete.
             //    - We have an IB start bar, and
@@ -302,8 +325,8 @@ namespace NinjaTrader.NinjaScript.Indicators.Gemify
             if (DisplaySessionMid)
             {
                 // Draw Session Mid
-                Draw.Text(this, "SessionMidText", false, "Session Mid", StartTime, (sessionMid + Instrument.MasterInstrument.TickSize), 10, SessionMidColor, TextFont, TextAlignment.Left, null, null, 100);
-                Draw.Line(this, "SessionMid", false, StartTime, sessionMid, TodaySessionEndTime, sessionMid, SessionMidColor, DashStyleHelper.DashDotDot, 1);
+                Draw.Text(this, "SessionMidText", false, "Session Mid", StartTime, (SessionMiddle + Instrument.MasterInstrument.TickSize), 10, SessionMidColor, TextFont, TextAlignment.Left, null, null, 100);
+                Draw.Line(this, "SessionMid", false, StartTime, SessionMiddle, TodaySessionEndTime, SessionMiddle, SessionMidColor, DashStyleHelper.DashDotDot, 1);
             }
 
             // Draw Extensions if IB is complete
@@ -313,55 +336,124 @@ namespace NinjaTrader.NinjaScript.Indicators.Gemify
                 double range = Instrument.MasterInstrument.RoundToTickSize(IBHigh - IBLow);
 
                 int barsAgo = (CurrentBars[0] - IBStartBar);
+                
+                double offset = range * (IBX1Multiple - 1.0);
+                Debug("IBX1 - Range : " + range + ", offset : " + offset);
+
+                IBX1Upper = IBHigh + offset;
+                IBX1Lower = IBLow - offset;
+
+                offset = range * (IBX2Multiple - 1.0);
+                Debug("IBX2 - Range : " + range + ", offset : " + offset);
+
+                IBX2Upper = IBHigh + offset;
+                IBX2Lower = IBLow - offset;
+
+                offset = range * (IBX3Multiple - 1.0);
+                Debug("IBX3 - Range : " + range + ", offset : " + offset);
+
+                IBX3Upper = IBHigh + offset;
+                IBX3Lower = IBLow - offset;
 
                 if (DisplayIBX1)
-				{
-                    double offset = range * (IBX1Multiple - 1.0);
-                    Debug("IBX1 - Range : " + range + ", offset : " + offset);
-
-                    double upper = IBHigh + offset;
-                    double lower = IBLow - offset;
-
-					Draw.Line(this, "IBX1Up" + tag, false, StartTime, upper, TodaySessionEndTime, upper, IBX1Color, IBX1DashStyle, IBX1Width);
-                    Draw.Line(this, "IBX1Down" + tag, false, StartTime, lower, TodaySessionEndTime, lower, IBX1Color, IBX1DashStyle, IBX1Width);
+                {
+                    Draw.Line(this, "IBX1Up" + tag, false, StartTime, IBX1Upper, TodaySessionEndTime, IBX1Upper, IBX1Color, IBX1DashStyle, IBX1Width);
+                    Draw.Line(this, "IBX1Down" + tag, false, StartTime, IBX1Lower, TodaySessionEndTime, IBX1Lower, IBX1Color, IBX1DashStyle, IBX1Width);
 
                     String multiple = String.Format("{0:0.0#}", IBX1Multiple);
-                    Draw.Text(this, "IBX1UpText" + tag, false, "IBx" + multiple, StartTime, (upper + Instrument.MasterInstrument.TickSize), 10, IBX1Color, TextFont, TextAlignment.Left, null, null, 100);
-                    Draw.Text(this, "IBX1DownText" + tag, false, "IBx" + multiple, StartTime, (lower + Instrument.MasterInstrument.TickSize), 10, IBX1Color, TextFont, TextAlignment.Left, null, null, 100);
+                    Draw.Text(this, "IBX1UpText" + tag, false, "IBx" + multiple, StartTime, (IBX1Upper + Instrument.MasterInstrument.TickSize), 10, IBX1Color, TextFont, TextAlignment.Left, null, null, 100);
+                    Draw.Text(this, "IBX1DownText" + tag, false, "IBx" + multiple, StartTime, (IBX1Lower + Instrument.MasterInstrument.TickSize), 10, IBX1Color, TextFont, TextAlignment.Left, null, null, 100);
                 }
 
                 if (DisplayIBX2)
                 {
-                    double offset = range * (IBX2Multiple - 1.0);
-                    Debug("IBX2 - Range : " + range + ", offset : " + offset);
-
-                    double upper = IBHigh + offset;
-                    double lower = IBLow - offset;
-
-                    Draw.Line(this, "IBX2Up" + tag, false, StartTime, upper, TodaySessionEndTime, upper, IBX2Color, IBX2DashStyle, IBX2Width);
-                    Draw.Line(this, "IBX2Down" + tag, false, StartTime, lower, TodaySessionEndTime, lower, IBX2Color, IBX2DashStyle, IBX2Width);
+                    Draw.Line(this, "IBX2Up" + tag, false, StartTime, IBX2Upper, TodaySessionEndTime, IBX2Upper, IBX2Color, IBX2DashStyle, IBX2Width);
+                    Draw.Line(this, "IBX2Down" + tag, false, StartTime, IBX2Lower, TodaySessionEndTime, IBX2Lower, IBX2Color, IBX2DashStyle, IBX2Width);
 
                     String multiple = String.Format("{0:0.0#}", IBX2Multiple);
-                    Draw.Text(this, "IBX2UpText" + tag, false, "IBx" + multiple, StartTime, (upper + Instrument.MasterInstrument.TickSize), 10, IBX2Color, TextFont, TextAlignment.Left, null, null, 100);
-                    Draw.Text(this, "IBX2DownText" + tag, false, "IBx" + multiple, StartTime, (lower + Instrument.MasterInstrument.TickSize), 10, IBX2Color, TextFont, TextAlignment.Left, null, null, 100);
+                    Draw.Text(this, "IBX2UpText" + tag, false, "IBx" + multiple, StartTime, (IBX2Upper + Instrument.MasterInstrument.TickSize), 10, IBX2Color, TextFont, TextAlignment.Left, null, null, 100);
+                    Draw.Text(this, "IBX2DownText" + tag, false, "IBx" + multiple, StartTime, (IBX2Lower + Instrument.MasterInstrument.TickSize), 10, IBX2Color, TextFont, TextAlignment.Left, null, null, 100);
 
                 }
 
                 if (DisplayIBX3)
                 {
-                    double offset = range * (IBX3Multiple - 1.0);
-                    Debug("IBX3 - Range : " + range + ", offset : " + offset);
-
-                    double upper = IBHigh + offset;
-                    double lower = IBLow - offset;
-
-                    Draw.Line(this, "IB31Up" + tag, false, StartTime, upper, TodaySessionEndTime, upper, IBX3Color, IBX3DashStyle, IBX3Width);
-                    Draw.Line(this, "IB31Down" + tag, false, StartTime, lower, TodaySessionEndTime, lower, IBX3Color, IBX3DashStyle, IBX3Width);
+                    Draw.Line(this, "IB31Up" + tag, false, StartTime, IBX3Upper, TodaySessionEndTime, IBX3Upper, IBX3Color, IBX3DashStyle, IBX3Width);
+                    Draw.Line(this, "IB31Down" + tag, false, StartTime, IBX3Lower, TodaySessionEndTime, IBX3Lower, IBX3Color, IBX3DashStyle, IBX3Width);
 
                     String multiple = String.Format("{0:0.0#}", IBX3Multiple);
-                    Draw.Text(this, "IBX3UpText" + tag, false, "IBx" + multiple, StartTime, (upper + Instrument.MasterInstrument.TickSize), 10, IBX3Color, TextFont, TextAlignment.Left, null, null, 100);
-                    Draw.Text(this, "IBX3DownText" + tag, false, "IBx" + multiple, StartTime, (lower + Instrument.MasterInstrument.TickSize), 10, IBX3Color, TextFont, TextAlignment.Left, null, null, 100);
+                    Draw.Text(this, "IBX3UpText" + tag, false, "IBx" + multiple, StartTime, (IBX3Upper + Instrument.MasterInstrument.TickSize), 10, IBX3Color, TextFont, TextAlignment.Left, null, null, 100);
+                    Draw.Text(this, "IBX3DownText" + tag, false, "IBx" + multiple, StartTime, (IBX3Lower + Instrument.MasterInstrument.TickSize), 10, IBX3Color, TextFont, TextAlignment.Left, null, null, 100);
                 }
+            }
+        }
+
+        protected override void OnRender(ChartControl chartControl, ChartScale chartScale)
+        {
+            // Operates only on the secondary time series (minute)
+            if (State == State.Historical || BarsInProgress != 1 || !DisplayMarginMarkers) return;
+
+            DrawText(chartScale, "IBH: " + IBHigh, IBHigh);
+            DrawText(chartScale, "IBL: " + IBLow, IBLow);
+            DrawText(chartScale, "SessMid: " + SessionMiddle, SessionMiddle);
+            if (DisplayOR && ORComplete)
+            {
+                DrawText(chartScale, "ORH: " + ORHigh, ORHigh);
+                DrawText(chartScale, "ORL: " + ORLow, ORLow);
+            }
+            if (IBComplete)
+            {
+                if (DisplayIBX1)
+                {
+                    DrawIBXMarker(chartScale, IBX1Multiple, IBX1Upper, IBX1Lower);
+                }
+                if (DisplayIBX2)
+                {
+                    DrawIBXMarker(chartScale, IBX2Multiple, IBX2Upper, IBX2Lower);
+                }
+                if (DisplayIBX3)
+                {
+                    DrawIBXMarker(chartScale, IBX3Multiple, IBX3Upper, IBX3Lower);
+                }
+            }
+        }
+
+        private void DrawIBXMarker(ChartScale chartScale, double ibxMultiple, double upper, double lower)
+        {
+            String multiple = String.Format("{0:0.0#}", ibxMultiple);
+            DrawText(chartScale, "IBx" + multiple + ": " + upper, upper);
+            DrawText(chartScale, "IBx" + multiple + ": " + lower, lower);
+        }
+
+        private void DrawText(ChartScale chartScale, String TextToWrite, double Price)
+        {
+            using (SharpDX.Direct2D1.Brush TextBrushDx = MarginMarkerTextBrush.ToDxBrush(RenderTarget))
+            using (SharpDX.Direct2D1.Brush FillBrushDx = MarginMarkerFillBrush.ToDxBrush(RenderTarget))
+            using (SharpDX.Direct2D1.Brush BorderBrushDx = MarginMarkerBorderBrush.ToDxBrush(RenderTarget))
+            {
+                SharpDX.DirectWrite.TextFormat textFormat = TextFont.ToDirectWriteTextFormat();
+                SharpDX.DirectWrite.TextLayout textLayout = new SharpDX.DirectWrite.TextLayout(NinjaTrader.Core.Globals.DirectWriteFactory, TextToWrite, textFormat, ChartPanel.X + ChartPanel.W, textFormat.FontSize);
+                SharpDX.DirectWrite.TextLayout markerTextLayout = new SharpDX.DirectWrite.TextLayout(NinjaTrader.Core.Globals.DirectWriteFactory, ">", textFormat, ChartPanel.X + ChartPanel.W, textFormat.FontSize);
+
+                float textWidth = textLayout.Metrics.Width;
+                float textHeight = textLayout.Metrics.Height;
+
+                float x = (float)(ChartPanel.W - textWidth - (8+5));
+                int priceCoordinate = chartScale.GetYByValue(Price);
+                float rectY = priceCoordinate - ((textHeight + 7) / (float)2.0);
+                float textY = priceCoordinate - (textHeight / (float)2.0);
+
+                SharpDX.Vector2 startPoint = new SharpDX.Vector2(x, rectY);
+                SharpDX.Vector2 upperTextPoint = new SharpDX.Vector2(startPoint.X + 4, textY);
+                SharpDX.Vector2 markerPoint = new SharpDX.Vector2(ChartPanel.W-markerTextLayout.Metrics.Width + 2, textY);
+
+                SharpDX.RectangleF rect = new SharpDX.RectangleF(startPoint.X, startPoint.Y, textWidth + 8, textHeight + 6);
+                RenderTarget.FillRectangle(rect, FillBrushDx);
+                RenderTarget.DrawRectangle(rect, BorderBrushDx, 1);
+                
+                RenderTarget.DrawTextLayout(markerPoint, markerTextLayout, BorderBrushDx, SharpDX.Direct2D1.DrawTextOptions.NoSnap);
+
+                RenderTarget.DrawTextLayout(upperTextPoint, textLayout, TextBrushDx, SharpDX.Direct2D1.DrawTextOptions.NoSnap);
             }
         }
 
@@ -382,7 +474,8 @@ namespace NinjaTrader.NinjaScript.Indicators.Gemify
             ORLow = double.MaxValue;
 
             SessionHigh = double.MinValue;
-            SessionLow = double.MaxValue; 
+            SessionLow = double.MaxValue;
+            SessionMiddle = double.MinValue;
         }
 
         private String GenerateTodayTag (DateTime now)
@@ -444,6 +537,11 @@ namespace NinjaTrader.NinjaScript.Indicators.Gemify
         [Display(Name = "Display Session Mid", Description = "Display Session Mid", Order = 400, GroupName = "Options")]
         public bool DisplaySessionMid
         { get; set; }
+
+        [Display(Name = "Price Markers on Margin", Description = "Display Markers on the Right Margin", Order = 500, GroupName = "Options")]
+        public bool DisplayMarginMarkers
+        { get; set; }
+        
 
 
         // ----------- IB Extensions
@@ -610,6 +708,13 @@ namespace NinjaTrader.NinjaScript.Indicators.Gemify
         public Brush TextColor
         { get; set; }
 
+        [Browsable(false)]
+        public string TextColorSerializable
+        {
+            get { return Serialize.BrushToString(TextColor); }
+            set { TextColor = Serialize.StringToBrush(value); }
+        }
+
         [NinjaScriptProperty]
         [XmlIgnore]
         [Display(Name = "IB Range Text Font", Description = "Font to use to display IB range", Order = 600, GroupName = "Colors")]
@@ -622,11 +727,64 @@ namespace NinjaTrader.NinjaScript.Indicators.Gemify
         public Brush ORLineColor
         { get; set; }
 
+        [Browsable(false)]
+        public string ORLineColorSerializable
+        {
+            get { return Serialize.BrushToString(ORLineColor); }
+            set { ORLineColor = Serialize.StringToBrush(value); }
+        }
+
         [NinjaScriptProperty]
         [XmlIgnore]
         [Display(Name = "Session Mid Line Color", Description = "Session Mid line color", Order = 800, GroupName = "Colors")]
         public Brush SessionMidColor
         { get; set; }
+
+        [Browsable(false)]
+        public string SessionMidColorSerializable
+        {
+            get { return Serialize.BrushToString(SessionMidColor); }
+            set { SessionMidColor = Serialize.StringToBrush(value); }
+        }
+
+        [NinjaScriptProperty]
+        [XmlIgnore]
+        [Display(Name = "Margin Marker Text Color", Description = "Margin Marker Text color", Order = 100, GroupName = "Margin Marker Colors")]
+        public Brush MarginMarkerTextBrush
+        { get; set; }
+
+        [Browsable(false)]
+        public string MarginMarkerTextBrushSerializable
+        {
+            get { return Serialize.BrushToString(MarginMarkerTextBrush); }
+            set { MarginMarkerTextBrush = Serialize.StringToBrush(value); }
+        }
+
+        [NinjaScriptProperty]
+        [XmlIgnore]
+        [Display(Name = "Margin Marker Fill Color", Description = "Margin Marker Fill color", Order = 200, GroupName = "Margin Marker Colors")]
+        public Brush MarginMarkerFillBrush
+        { get; set; }
+
+        [Browsable(false)]
+        public string MarginMarkerFillBrushSerializable
+        {
+            get { return Serialize.BrushToString(MarginMarkerFillBrush); }
+            set { MarginMarkerFillBrush = Serialize.StringToBrush(value); }
+        }
+
+        [NinjaScriptProperty]
+        [XmlIgnore]
+        [Display(Name = "Margin Marker Border Color", Description = "Margin Marker Border color", Order = 300, GroupName = "Margin Marker Colors")]
+        public Brush MarginMarkerBorderBrush
+        { get; set; }
+
+        [Browsable(false)]
+        public string MarginMarkerBorderBrushSerializable
+        {
+            get { return Serialize.BrushToString(MarginMarkerBorderBrush); }
+            set { MarginMarkerBorderBrush = Serialize.StringToBrush(value); }
+        }
 
 
         [Browsable(false)]
@@ -691,18 +849,18 @@ namespace NinjaTrader.NinjaScript.Indicators
 	public partial class Indicator : NinjaTrader.Gui.NinjaScript.IndicatorRenderBase
 	{
 		private Gemify.InitialBalance[] cacheInitialBalance;
-		public Gemify.InitialBalance InitialBalance(DateTime iBStartTime, DateTime iBEndTime, DateTime sessionEndTime, bool displayIBRange, bool displayOR, bool displaySessionMid, bool displayIBX1, double iBX1Multiple, Brush iBX1Color, DashStyleHelper iBX1DashStyle, int iBX1Width, bool displayIBX2, double iBX2Multiple, Brush iBX2Color, DashStyleHelper iBX2DashStyle, int iBX2Width, bool displayIBX3, double iBX3Multiple, Brush iBX3Color, DashStyleHelper iBX3DashStyle, int iBX3Width, Brush iBFillColor, int iBFillOpacity, Brush iBHighlightColor, int iBHighlightOpacity, Brush textColor, SimpleFont textFont, Brush oRLineColor, Brush sessionMidColor)
+		public Gemify.InitialBalance InitialBalance(DateTime iBStartTime, DateTime iBEndTime, DateTime sessionEndTime, bool displayIBRange, bool displayOR, bool displaySessionMid, bool displayIBX1, double iBX1Multiple, Brush iBX1Color, DashStyleHelper iBX1DashStyle, int iBX1Width, bool displayIBX2, double iBX2Multiple, Brush iBX2Color, DashStyleHelper iBX2DashStyle, int iBX2Width, bool displayIBX3, double iBX3Multiple, Brush iBX3Color, DashStyleHelper iBX3DashStyle, int iBX3Width, Brush iBFillColor, int iBFillOpacity, Brush iBHighlightColor, int iBHighlightOpacity, Brush textColor, SimpleFont textFont, Brush oRLineColor, Brush sessionMidColor, Brush marginMarkerTextBrush, Brush marginMarkerFillBrush, Brush marginMarkerBorderBrush)
 		{
-			return InitialBalance(Input, iBStartTime, iBEndTime, sessionEndTime, displayIBRange, displayOR, displaySessionMid, displayIBX1, iBX1Multiple, iBX1Color, iBX1DashStyle, iBX1Width, displayIBX2, iBX2Multiple, iBX2Color, iBX2DashStyle, iBX2Width, displayIBX3, iBX3Multiple, iBX3Color, iBX3DashStyle, iBX3Width, iBFillColor, iBFillOpacity, iBHighlightColor, iBHighlightOpacity, textColor, textFont, oRLineColor, sessionMidColor);
+			return InitialBalance(Input, iBStartTime, iBEndTime, sessionEndTime, displayIBRange, displayOR, displaySessionMid, displayIBX1, iBX1Multiple, iBX1Color, iBX1DashStyle, iBX1Width, displayIBX2, iBX2Multiple, iBX2Color, iBX2DashStyle, iBX2Width, displayIBX3, iBX3Multiple, iBX3Color, iBX3DashStyle, iBX3Width, iBFillColor, iBFillOpacity, iBHighlightColor, iBHighlightOpacity, textColor, textFont, oRLineColor, sessionMidColor, marginMarkerTextBrush, marginMarkerFillBrush, marginMarkerBorderBrush);
 		}
 
-		public Gemify.InitialBalance InitialBalance(ISeries<double> input, DateTime iBStartTime, DateTime iBEndTime, DateTime sessionEndTime, bool displayIBRange, bool displayOR, bool displaySessionMid, bool displayIBX1, double iBX1Multiple, Brush iBX1Color, DashStyleHelper iBX1DashStyle, int iBX1Width, bool displayIBX2, double iBX2Multiple, Brush iBX2Color, DashStyleHelper iBX2DashStyle, int iBX2Width, bool displayIBX3, double iBX3Multiple, Brush iBX3Color, DashStyleHelper iBX3DashStyle, int iBX3Width, Brush iBFillColor, int iBFillOpacity, Brush iBHighlightColor, int iBHighlightOpacity, Brush textColor, SimpleFont textFont, Brush oRLineColor, Brush sessionMidColor)
+		public Gemify.InitialBalance InitialBalance(ISeries<double> input, DateTime iBStartTime, DateTime iBEndTime, DateTime sessionEndTime, bool displayIBRange, bool displayOR, bool displaySessionMid, bool displayIBX1, double iBX1Multiple, Brush iBX1Color, DashStyleHelper iBX1DashStyle, int iBX1Width, bool displayIBX2, double iBX2Multiple, Brush iBX2Color, DashStyleHelper iBX2DashStyle, int iBX2Width, bool displayIBX3, double iBX3Multiple, Brush iBX3Color, DashStyleHelper iBX3DashStyle, int iBX3Width, Brush iBFillColor, int iBFillOpacity, Brush iBHighlightColor, int iBHighlightOpacity, Brush textColor, SimpleFont textFont, Brush oRLineColor, Brush sessionMidColor, Brush marginMarkerTextBrush, Brush marginMarkerFillBrush, Brush marginMarkerBorderBrush)
 		{
 			if (cacheInitialBalance != null)
 				for (int idx = 0; idx < cacheInitialBalance.Length; idx++)
-					if (cacheInitialBalance[idx] != null && cacheInitialBalance[idx].IBStartTime == iBStartTime && cacheInitialBalance[idx].IBEndTime == iBEndTime && cacheInitialBalance[idx].SessionEndTime == sessionEndTime && cacheInitialBalance[idx].DisplayIBRange == displayIBRange && cacheInitialBalance[idx].DisplayOR == displayOR && cacheInitialBalance[idx].DisplaySessionMid == displaySessionMid && cacheInitialBalance[idx].DisplayIBX1 == displayIBX1 && cacheInitialBalance[idx].IBX1Multiple == iBX1Multiple && cacheInitialBalance[idx].IBX1Color == iBX1Color && cacheInitialBalance[idx].IBX1DashStyle == iBX1DashStyle && cacheInitialBalance[idx].IBX1Width == iBX1Width && cacheInitialBalance[idx].DisplayIBX2 == displayIBX2 && cacheInitialBalance[idx].IBX2Multiple == iBX2Multiple && cacheInitialBalance[idx].IBX2Color == iBX2Color && cacheInitialBalance[idx].IBX2DashStyle == iBX2DashStyle && cacheInitialBalance[idx].IBX2Width == iBX2Width && cacheInitialBalance[idx].DisplayIBX3 == displayIBX3 && cacheInitialBalance[idx].IBX3Multiple == iBX3Multiple && cacheInitialBalance[idx].IBX3Color == iBX3Color && cacheInitialBalance[idx].IBX3DashStyle == iBX3DashStyle && cacheInitialBalance[idx].IBX3Width == iBX3Width && cacheInitialBalance[idx].IBFillColor == iBFillColor && cacheInitialBalance[idx].IBFillOpacity == iBFillOpacity && cacheInitialBalance[idx].IBHighlightColor == iBHighlightColor && cacheInitialBalance[idx].IBHighlightOpacity == iBHighlightOpacity && cacheInitialBalance[idx].TextColor == textColor && cacheInitialBalance[idx].TextFont == textFont && cacheInitialBalance[idx].ORLineColor == oRLineColor && cacheInitialBalance[idx].SessionMidColor == sessionMidColor && cacheInitialBalance[idx].EqualsInput(input))
+					if (cacheInitialBalance[idx] != null && cacheInitialBalance[idx].IBStartTime == iBStartTime && cacheInitialBalance[idx].IBEndTime == iBEndTime && cacheInitialBalance[idx].SessionEndTime == sessionEndTime && cacheInitialBalance[idx].DisplayIBRange == displayIBRange && cacheInitialBalance[idx].DisplayOR == displayOR && cacheInitialBalance[idx].DisplaySessionMid == displaySessionMid && cacheInitialBalance[idx].DisplayIBX1 == displayIBX1 && cacheInitialBalance[idx].IBX1Multiple == iBX1Multiple && cacheInitialBalance[idx].IBX1Color == iBX1Color && cacheInitialBalance[idx].IBX1DashStyle == iBX1DashStyle && cacheInitialBalance[idx].IBX1Width == iBX1Width && cacheInitialBalance[idx].DisplayIBX2 == displayIBX2 && cacheInitialBalance[idx].IBX2Multiple == iBX2Multiple && cacheInitialBalance[idx].IBX2Color == iBX2Color && cacheInitialBalance[idx].IBX2DashStyle == iBX2DashStyle && cacheInitialBalance[idx].IBX2Width == iBX2Width && cacheInitialBalance[idx].DisplayIBX3 == displayIBX3 && cacheInitialBalance[idx].IBX3Multiple == iBX3Multiple && cacheInitialBalance[idx].IBX3Color == iBX3Color && cacheInitialBalance[idx].IBX3DashStyle == iBX3DashStyle && cacheInitialBalance[idx].IBX3Width == iBX3Width && cacheInitialBalance[idx].IBFillColor == iBFillColor && cacheInitialBalance[idx].IBFillOpacity == iBFillOpacity && cacheInitialBalance[idx].IBHighlightColor == iBHighlightColor && cacheInitialBalance[idx].IBHighlightOpacity == iBHighlightOpacity && cacheInitialBalance[idx].TextColor == textColor && cacheInitialBalance[idx].TextFont == textFont && cacheInitialBalance[idx].ORLineColor == oRLineColor && cacheInitialBalance[idx].SessionMidColor == sessionMidColor && cacheInitialBalance[idx].MarginMarkerTextBrush == marginMarkerTextBrush && cacheInitialBalance[idx].MarginMarkerFillBrush == marginMarkerFillBrush && cacheInitialBalance[idx].MarginMarkerBorderBrush == marginMarkerBorderBrush && cacheInitialBalance[idx].EqualsInput(input))
 						return cacheInitialBalance[idx];
-			return CacheIndicator<Gemify.InitialBalance>(new Gemify.InitialBalance(){ IBStartTime = iBStartTime, IBEndTime = iBEndTime, SessionEndTime = sessionEndTime, DisplayIBRange = displayIBRange, DisplayOR = displayOR, DisplaySessionMid = displaySessionMid, DisplayIBX1 = displayIBX1, IBX1Multiple = iBX1Multiple, IBX1Color = iBX1Color, IBX1DashStyle = iBX1DashStyle, IBX1Width = iBX1Width, DisplayIBX2 = displayIBX2, IBX2Multiple = iBX2Multiple, IBX2Color = iBX2Color, IBX2DashStyle = iBX2DashStyle, IBX2Width = iBX2Width, DisplayIBX3 = displayIBX3, IBX3Multiple = iBX3Multiple, IBX3Color = iBX3Color, IBX3DashStyle = iBX3DashStyle, IBX3Width = iBX3Width, IBFillColor = iBFillColor, IBFillOpacity = iBFillOpacity, IBHighlightColor = iBHighlightColor, IBHighlightOpacity = iBHighlightOpacity, TextColor = textColor, TextFont = textFont, ORLineColor = oRLineColor, SessionMidColor = sessionMidColor }, input, ref cacheInitialBalance);
+			return CacheIndicator<Gemify.InitialBalance>(new Gemify.InitialBalance(){ IBStartTime = iBStartTime, IBEndTime = iBEndTime, SessionEndTime = sessionEndTime, DisplayIBRange = displayIBRange, DisplayOR = displayOR, DisplaySessionMid = displaySessionMid, DisplayIBX1 = displayIBX1, IBX1Multiple = iBX1Multiple, IBX1Color = iBX1Color, IBX1DashStyle = iBX1DashStyle, IBX1Width = iBX1Width, DisplayIBX2 = displayIBX2, IBX2Multiple = iBX2Multiple, IBX2Color = iBX2Color, IBX2DashStyle = iBX2DashStyle, IBX2Width = iBX2Width, DisplayIBX3 = displayIBX3, IBX3Multiple = iBX3Multiple, IBX3Color = iBX3Color, IBX3DashStyle = iBX3DashStyle, IBX3Width = iBX3Width, IBFillColor = iBFillColor, IBFillOpacity = iBFillOpacity, IBHighlightColor = iBHighlightColor, IBHighlightOpacity = iBHighlightOpacity, TextColor = textColor, TextFont = textFont, ORLineColor = oRLineColor, SessionMidColor = sessionMidColor, MarginMarkerTextBrush = marginMarkerTextBrush, MarginMarkerFillBrush = marginMarkerFillBrush, MarginMarkerBorderBrush = marginMarkerBorderBrush }, input, ref cacheInitialBalance);
 		}
 	}
 }
@@ -711,14 +869,14 @@ namespace NinjaTrader.NinjaScript.MarketAnalyzerColumns
 {
 	public partial class MarketAnalyzerColumn : MarketAnalyzerColumnBase
 	{
-		public Indicators.Gemify.InitialBalance InitialBalance(DateTime iBStartTime, DateTime iBEndTime, DateTime sessionEndTime, bool displayIBRange, bool displayOR, bool displaySessionMid, bool displayIBX1, double iBX1Multiple, Brush iBX1Color, DashStyleHelper iBX1DashStyle, int iBX1Width, bool displayIBX2, double iBX2Multiple, Brush iBX2Color, DashStyleHelper iBX2DashStyle, int iBX2Width, bool displayIBX3, double iBX3Multiple, Brush iBX3Color, DashStyleHelper iBX3DashStyle, int iBX3Width, Brush iBFillColor, int iBFillOpacity, Brush iBHighlightColor, int iBHighlightOpacity, Brush textColor, SimpleFont textFont, Brush oRLineColor, Brush sessionMidColor)
+		public Indicators.Gemify.InitialBalance InitialBalance(DateTime iBStartTime, DateTime iBEndTime, DateTime sessionEndTime, bool displayIBRange, bool displayOR, bool displaySessionMid, bool displayIBX1, double iBX1Multiple, Brush iBX1Color, DashStyleHelper iBX1DashStyle, int iBX1Width, bool displayIBX2, double iBX2Multiple, Brush iBX2Color, DashStyleHelper iBX2DashStyle, int iBX2Width, bool displayIBX3, double iBX3Multiple, Brush iBX3Color, DashStyleHelper iBX3DashStyle, int iBX3Width, Brush iBFillColor, int iBFillOpacity, Brush iBHighlightColor, int iBHighlightOpacity, Brush textColor, SimpleFont textFont, Brush oRLineColor, Brush sessionMidColor, Brush marginMarkerTextBrush, Brush marginMarkerFillBrush, Brush marginMarkerBorderBrush)
 		{
-			return indicator.InitialBalance(Input, iBStartTime, iBEndTime, sessionEndTime, displayIBRange, displayOR, displaySessionMid, displayIBX1, iBX1Multiple, iBX1Color, iBX1DashStyle, iBX1Width, displayIBX2, iBX2Multiple, iBX2Color, iBX2DashStyle, iBX2Width, displayIBX3, iBX3Multiple, iBX3Color, iBX3DashStyle, iBX3Width, iBFillColor, iBFillOpacity, iBHighlightColor, iBHighlightOpacity, textColor, textFont, oRLineColor, sessionMidColor);
+			return indicator.InitialBalance(Input, iBStartTime, iBEndTime, sessionEndTime, displayIBRange, displayOR, displaySessionMid, displayIBX1, iBX1Multiple, iBX1Color, iBX1DashStyle, iBX1Width, displayIBX2, iBX2Multiple, iBX2Color, iBX2DashStyle, iBX2Width, displayIBX3, iBX3Multiple, iBX3Color, iBX3DashStyle, iBX3Width, iBFillColor, iBFillOpacity, iBHighlightColor, iBHighlightOpacity, textColor, textFont, oRLineColor, sessionMidColor, marginMarkerTextBrush, marginMarkerFillBrush, marginMarkerBorderBrush);
 		}
 
-		public Indicators.Gemify.InitialBalance InitialBalance(ISeries<double> input , DateTime iBStartTime, DateTime iBEndTime, DateTime sessionEndTime, bool displayIBRange, bool displayOR, bool displaySessionMid, bool displayIBX1, double iBX1Multiple, Brush iBX1Color, DashStyleHelper iBX1DashStyle, int iBX1Width, bool displayIBX2, double iBX2Multiple, Brush iBX2Color, DashStyleHelper iBX2DashStyle, int iBX2Width, bool displayIBX3, double iBX3Multiple, Brush iBX3Color, DashStyleHelper iBX3DashStyle, int iBX3Width, Brush iBFillColor, int iBFillOpacity, Brush iBHighlightColor, int iBHighlightOpacity, Brush textColor, SimpleFont textFont, Brush oRLineColor, Brush sessionMidColor)
+		public Indicators.Gemify.InitialBalance InitialBalance(ISeries<double> input , DateTime iBStartTime, DateTime iBEndTime, DateTime sessionEndTime, bool displayIBRange, bool displayOR, bool displaySessionMid, bool displayIBX1, double iBX1Multiple, Brush iBX1Color, DashStyleHelper iBX1DashStyle, int iBX1Width, bool displayIBX2, double iBX2Multiple, Brush iBX2Color, DashStyleHelper iBX2DashStyle, int iBX2Width, bool displayIBX3, double iBX3Multiple, Brush iBX3Color, DashStyleHelper iBX3DashStyle, int iBX3Width, Brush iBFillColor, int iBFillOpacity, Brush iBHighlightColor, int iBHighlightOpacity, Brush textColor, SimpleFont textFont, Brush oRLineColor, Brush sessionMidColor, Brush marginMarkerTextBrush, Brush marginMarkerFillBrush, Brush marginMarkerBorderBrush)
 		{
-			return indicator.InitialBalance(input, iBStartTime, iBEndTime, sessionEndTime, displayIBRange, displayOR, displaySessionMid, displayIBX1, iBX1Multiple, iBX1Color, iBX1DashStyle, iBX1Width, displayIBX2, iBX2Multiple, iBX2Color, iBX2DashStyle, iBX2Width, displayIBX3, iBX3Multiple, iBX3Color, iBX3DashStyle, iBX3Width, iBFillColor, iBFillOpacity, iBHighlightColor, iBHighlightOpacity, textColor, textFont, oRLineColor, sessionMidColor);
+			return indicator.InitialBalance(input, iBStartTime, iBEndTime, sessionEndTime, displayIBRange, displayOR, displaySessionMid, displayIBX1, iBX1Multiple, iBX1Color, iBX1DashStyle, iBX1Width, displayIBX2, iBX2Multiple, iBX2Color, iBX2DashStyle, iBX2Width, displayIBX3, iBX3Multiple, iBX3Color, iBX3DashStyle, iBX3Width, iBFillColor, iBFillOpacity, iBHighlightColor, iBHighlightOpacity, textColor, textFont, oRLineColor, sessionMidColor, marginMarkerTextBrush, marginMarkerFillBrush, marginMarkerBorderBrush);
 		}
 	}
 }
@@ -727,14 +885,14 @@ namespace NinjaTrader.NinjaScript.Strategies
 {
 	public partial class Strategy : NinjaTrader.Gui.NinjaScript.StrategyRenderBase
 	{
-		public Indicators.Gemify.InitialBalance InitialBalance(DateTime iBStartTime, DateTime iBEndTime, DateTime sessionEndTime, bool displayIBRange, bool displayOR, bool displaySessionMid, bool displayIBX1, double iBX1Multiple, Brush iBX1Color, DashStyleHelper iBX1DashStyle, int iBX1Width, bool displayIBX2, double iBX2Multiple, Brush iBX2Color, DashStyleHelper iBX2DashStyle, int iBX2Width, bool displayIBX3, double iBX3Multiple, Brush iBX3Color, DashStyleHelper iBX3DashStyle, int iBX3Width, Brush iBFillColor, int iBFillOpacity, Brush iBHighlightColor, int iBHighlightOpacity, Brush textColor, SimpleFont textFont, Brush oRLineColor, Brush sessionMidColor)
+		public Indicators.Gemify.InitialBalance InitialBalance(DateTime iBStartTime, DateTime iBEndTime, DateTime sessionEndTime, bool displayIBRange, bool displayOR, bool displaySessionMid, bool displayIBX1, double iBX1Multiple, Brush iBX1Color, DashStyleHelper iBX1DashStyle, int iBX1Width, bool displayIBX2, double iBX2Multiple, Brush iBX2Color, DashStyleHelper iBX2DashStyle, int iBX2Width, bool displayIBX3, double iBX3Multiple, Brush iBX3Color, DashStyleHelper iBX3DashStyle, int iBX3Width, Brush iBFillColor, int iBFillOpacity, Brush iBHighlightColor, int iBHighlightOpacity, Brush textColor, SimpleFont textFont, Brush oRLineColor, Brush sessionMidColor, Brush marginMarkerTextBrush, Brush marginMarkerFillBrush, Brush marginMarkerBorderBrush)
 		{
-			return indicator.InitialBalance(Input, iBStartTime, iBEndTime, sessionEndTime, displayIBRange, displayOR, displaySessionMid, displayIBX1, iBX1Multiple, iBX1Color, iBX1DashStyle, iBX1Width, displayIBX2, iBX2Multiple, iBX2Color, iBX2DashStyle, iBX2Width, displayIBX3, iBX3Multiple, iBX3Color, iBX3DashStyle, iBX3Width, iBFillColor, iBFillOpacity, iBHighlightColor, iBHighlightOpacity, textColor, textFont, oRLineColor, sessionMidColor);
+			return indicator.InitialBalance(Input, iBStartTime, iBEndTime, sessionEndTime, displayIBRange, displayOR, displaySessionMid, displayIBX1, iBX1Multiple, iBX1Color, iBX1DashStyle, iBX1Width, displayIBX2, iBX2Multiple, iBX2Color, iBX2DashStyle, iBX2Width, displayIBX3, iBX3Multiple, iBX3Color, iBX3DashStyle, iBX3Width, iBFillColor, iBFillOpacity, iBHighlightColor, iBHighlightOpacity, textColor, textFont, oRLineColor, sessionMidColor, marginMarkerTextBrush, marginMarkerFillBrush, marginMarkerBorderBrush);
 		}
 
-		public Indicators.Gemify.InitialBalance InitialBalance(ISeries<double> input , DateTime iBStartTime, DateTime iBEndTime, DateTime sessionEndTime, bool displayIBRange, bool displayOR, bool displaySessionMid, bool displayIBX1, double iBX1Multiple, Brush iBX1Color, DashStyleHelper iBX1DashStyle, int iBX1Width, bool displayIBX2, double iBX2Multiple, Brush iBX2Color, DashStyleHelper iBX2DashStyle, int iBX2Width, bool displayIBX3, double iBX3Multiple, Brush iBX3Color, DashStyleHelper iBX3DashStyle, int iBX3Width, Brush iBFillColor, int iBFillOpacity, Brush iBHighlightColor, int iBHighlightOpacity, Brush textColor, SimpleFont textFont, Brush oRLineColor, Brush sessionMidColor)
+		public Indicators.Gemify.InitialBalance InitialBalance(ISeries<double> input , DateTime iBStartTime, DateTime iBEndTime, DateTime sessionEndTime, bool displayIBRange, bool displayOR, bool displaySessionMid, bool displayIBX1, double iBX1Multiple, Brush iBX1Color, DashStyleHelper iBX1DashStyle, int iBX1Width, bool displayIBX2, double iBX2Multiple, Brush iBX2Color, DashStyleHelper iBX2DashStyle, int iBX2Width, bool displayIBX3, double iBX3Multiple, Brush iBX3Color, DashStyleHelper iBX3DashStyle, int iBX3Width, Brush iBFillColor, int iBFillOpacity, Brush iBHighlightColor, int iBHighlightOpacity, Brush textColor, SimpleFont textFont, Brush oRLineColor, Brush sessionMidColor, Brush marginMarkerTextBrush, Brush marginMarkerFillBrush, Brush marginMarkerBorderBrush)
 		{
-			return indicator.InitialBalance(input, iBStartTime, iBEndTime, sessionEndTime, displayIBRange, displayOR, displaySessionMid, displayIBX1, iBX1Multiple, iBX1Color, iBX1DashStyle, iBX1Width, displayIBX2, iBX2Multiple, iBX2Color, iBX2DashStyle, iBX2Width, displayIBX3, iBX3Multiple, iBX3Color, iBX3DashStyle, iBX3Width, iBFillColor, iBFillOpacity, iBHighlightColor, iBHighlightOpacity, textColor, textFont, oRLineColor, sessionMidColor);
+			return indicator.InitialBalance(input, iBStartTime, iBEndTime, sessionEndTime, displayIBRange, displayOR, displaySessionMid, displayIBX1, iBX1Multiple, iBX1Color, iBX1DashStyle, iBX1Width, displayIBX2, iBX2Multiple, iBX2Color, iBX2DashStyle, iBX2Width, displayIBX3, iBX3Multiple, iBX3Color, iBX3DashStyle, iBX3Width, iBFillColor, iBFillOpacity, iBHighlightColor, iBHighlightOpacity, textColor, textFont, oRLineColor, sessionMidColor, marginMarkerTextBrush, marginMarkerFillBrush, marginMarkerBorderBrush);
 		}
 	}
 }
