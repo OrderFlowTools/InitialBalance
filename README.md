@@ -7,6 +7,7 @@ Simple IB+OR indicator for Ninjatrader v8.
 - Displays Current IB Range and historical Median Range (based on how many days are loaded on chart)
 - Displays Session Mid
 - Displays Opening Range (OR) (30 seconds)
+- Optionally display historical IBs
 
 _Note: All time configuration values are considered local time._
 
