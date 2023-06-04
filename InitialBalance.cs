@@ -808,6 +808,8 @@ namespace NinjaTrader.NinjaScript.Indicators.Gemify
 
         #region Public Properties
 
+        [Browsable(false)]
+        [XmlIgnore()]
         public bool IsIBComplete
         {
             get { return _ibComplete; }
