@@ -12,8 +12,8 @@ _Note: All time configuration values are considered local time._
 
 # Screenshots
 
-### Displaying IB + OR + SessionMid 
-![IB_OR_SessionMid](https://github.com/OrderFlowTools/screenshots/blob/main/ib/ib_or_sessmid.png)
+### Displaying IB + OR + SessionMid with Markers
+![image](https://github.com/OrderFlowTools/InitialBalance/assets/25984676/230bb931-ce4c-4050-bb30-3e7669040b44)
 
 ### IB Parameters
 ![IB_Params](https://github.com/OrderFlowTools/screenshots/blob/main/ib/ibx_params.png)
