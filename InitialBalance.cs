@@ -11,6 +11,7 @@ using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Globalization;
 using System.Windows;
+using System.Windows.Documents;
 using System.Windows.Media;
 using System.Xml.Serialization;
 #endregion
@@ -18,27 +19,30 @@ using System.Xml.Serialization;
 //This namespace holds Indicators in this folder and is required. Do not change it. 
 namespace NinjaTrader.NinjaScript.Indicators.Gemify
 {
-    [Gui.CategoryOrder("IB Extention 1", 1)]
-    [Gui.CategoryOrder("IB Extention 2", 2)]
-    [Gui.CategoryOrder("IB Extention 3", 3)]
-    [Gui.CategoryOrder("Initial Balance Period", 4)]
+    [Gui.CategoryOrder("Initial Balance Period", 1)]
+    [Gui.CategoryOrder("Display Mode", 2)]
+    [Gui.CategoryOrder("Full Mode Options", 3)]
+    [Gui.CategoryOrder("Minimal Mode Options", 4)]
     [Gui.CategoryOrder("Options", 5)]
-    [Gui.CategoryOrder("Colors", 6)]
-    [Gui.CategoryOrder("Margin Marker Colors", 7)]
+    [Gui.CategoryOrder("IB Extention 1", 6)]
+    [Gui.CategoryOrder("IB Extention 2", 7)]
+    [Gui.CategoryOrder("IB Extention 3", 8)]
+    [Gui.CategoryOrder("Colors", 9)]
+    [Gui.CategoryOrder("Margin Marker Colors", 10)]
     public class InitialBalance : Indicator
-	{
+    {
         private DateTime NTStartTime;
 
         private double _ibHigh;
-		private double _ibLow;
+        private double _ibLow;
         private double _sessMid;
 
         private double IBHighState;
-		private double IBLowState;
+        private double IBLowState;
 
-		private int IBStartBar;
+        private int IBStartBar;
 
-		private bool _ibComplete;
+        private bool _ibComplete;
 
         private double _ibx1Upper;
         private double _ibx1Lower;
@@ -57,33 +61,40 @@ namespace NinjaTrader.NinjaScript.Indicators.Gemify
         private double _sessionLow;
         private double _sessionMiddle;
 
-        private DateTime HistoricalIBThreshold;
+        private DateTime dtCurrentIBStart;
+        private DateTime dtHistoricalIBStart;
 
         private bool IsDebug;
+
+        public enum IBDisplayModeEnum
+        {
+            FULL,
+            MINIMAL
+        }
 
         public InitialBalance()
         {
         }
 
         protected override void OnStateChange()
-		{
-			Debug(">>> " + State); 
+        {
+            Debug(this.Name + ":>>> " + State);
 
-			if (State == State.SetDefaults)
-			{
-				Description									= @"Displays Initial Balance and Extensions";
-				Name										= "\"Initial Balance\"";
-				Calculate									= Calculate.OnPriceChange;
-				IsOverlay									= true;
-				DisplayInDataBox							= true;
-				DrawOnPricePanel							= true;
-				DrawHorizontalGridLines						= true;
-				DrawVerticalGridLines						= true;
-				PaintPriceMarkers							= true;
-				ScaleJustification							= NinjaTrader.Gui.Chart.ScaleJustification.Right;
-				//Disable this property if your indicator requires custom values that cumulate with each new market data event. 
-				//See Help Guide for additional information.
-				IsSuspendedWhileInactive					= true;
+            if (State == State.SetDefaults)
+            {
+                Description = @"Displays Initial Balance and Extensions";
+                Name = "\"Initial Balance\"";
+                Calculate = Calculate.OnPriceChange;
+                IsOverlay = true;
+                DisplayInDataBox = true;
+                DrawOnPricePanel = true;
+                DrawHorizontalGridLines = true;
+                DrawVerticalGridLines = true;
+                PaintPriceMarkers = true;
+                ScaleJustification = NinjaTrader.Gui.Chart.ScaleJustification.Right;
+                //Disable this property if your indicator requires custom values that cumulate with each new market data event. 
+                //See Help Guide for additional information.
+                IsSuspendedWhileInactive = true;
                 PaintPriceMarkers = true;
 
                 // Defaults
@@ -92,9 +103,13 @@ namespace NinjaTrader.NinjaScript.Indicators.Gemify
 
                 IsDebug = false;
 
-                PlotHistoricalIBs = true;
+                DisplayMode = IBDisplayModeEnum.FULL;
+                MarkersOnlyIBRangeTextPosition = TextPosition.TopRight;
 
-                DisplayOR = true;
+                PlotHistoricalIBs = true;
+                HistoricalIBLookback = 15;
+
+                DisplayOR = false;
                 _orComplete = false;
                 ORLineColor = Brushes.Gray;
 
@@ -104,11 +119,11 @@ namespace NinjaTrader.NinjaScript.Indicators.Gemify
                 SessionMidColor = Brushes.Yellow;
 
                 DisplayIBRange = true;
-				HighlightIBPeriod = true;
+                HighlightIBPeriod = true;
                 DisplayMarginMarkers = true;
 
                 IBStartBar = -1;
-				_ibComplete = false;
+                _ibComplete = false;
 
                 // Default Initial Balance set between 9:30 to 10:30 AM EST
                 IBStartTime = DateTime.Parse("09:30", System.Globalization.CultureInfo.InvariantCulture);
@@ -118,18 +133,18 @@ namespace NinjaTrader.NinjaScript.Indicators.Gemify
                 IBHighState = 0;
                 IBLowState = 0;
 
-				IBFillColor	= Brushes.Blue;
-				IBFillOpacity = 10;
+                IBFillColor = Brushes.Blue;
+                IBFillOpacity = 10;
 
-				IBHighlightColor = Brushes.Yellow;
-				IBHighlightOpacity = 2;
+                IBHighlightColor = Brushes.Yellow;
+                IBHighlightOpacity = 2;
 
                 TextFont = new SimpleFont("Verdana", 11);
                 TextColor = Brushes.HotPink;
 
-				// IB Extension defaults
-				DisplayIBX1 = true;
-				IBX1Multiple = 1.5;
+                // IB Extension defaults
+                DisplayIBX1 = true;
+                IBX1Multiple = 1.5;
                 IBX1Color = Brushes.DarkOrange;
                 IBX1DashStyle = DashStyleHelper.Dash;
                 IBX1Width = 1;
@@ -152,8 +167,8 @@ namespace NinjaTrader.NinjaScript.Indicators.Gemify
 
             }
             else if (State == State.Configure)
-			{
-				Debug("Adding Seconds Data Series");
+            {
+                Debug("Adding Seconds Data Series");
                 if (DisplayOR)
                 {
                     // Add seconds based bars to determine Initial Balance.
@@ -161,17 +176,22 @@ namespace NinjaTrader.NinjaScript.Indicators.Gemify
                     // A single-second series will be highly accurate on the UI, but CPU expensive.
 
                     // The values that matter - IBH, IBL, etc will be accurate regardless.
-                    AddDataSeries(BarsPeriodType.Second, 30);
+                    AddDataSeries(Instrument.FullName, new BarsPeriod() { BarsPeriodType=BarsPeriodType.Second, Value=30 }, "CME US Index Futures RTH", true);
                 }
                 else
                 {
                     AddDataSeries(BarsPeriodType.Minute, 1);
                 }
 
+                // No IBs to be drawn on UI if in Minimal mode
+                PlotHistoricalIBs = DisplayMode == IBDisplayModeEnum.MINIMAL ? false : PlotHistoricalIBs;
+                // Markers are mandatory in Minimal mode :)
+                DisplayMarginMarkers = DisplayMode == IBDisplayModeEnum.MINIMAL ? true : DisplayMarginMarkers;
+
                 AddPlot(Brushes.Transparent, "IBHPlot");
                 AddPlot(Brushes.Transparent, "SessMidPlot");
                 AddPlot(Brushes.Transparent, "IBLPlot");
-                
+
                 AddPlot(Brushes.Transparent, "ORHPlot");
                 AddPlot(Brushes.Transparent, "ORLPlot");
 
@@ -179,23 +199,37 @@ namespace NinjaTrader.NinjaScript.Indicators.Gemify
             }
             else if (State == State.DataLoaded)
             {
-                HistoricalIBThreshold = BarsArray[1].LastBarTime.Date;
+                dtCurrentIBStart = BarsArray[1].LastBarTime.Date;
+                Debug("Setting current IB datetime to " + dtCurrentIBStart);
+
+                dtHistoricalIBStart = SubtractWeekdays(dtCurrentIBStart, HistoricalIBLookback);
+                Debug("Setting historical IB limit (lookback) datetime to " + dtHistoricalIBStart);
             }
         }
 
-		private void Debug(String message) {
-			if (IsDebug) Print(message);
-		}
+        private DateTime SubtractWeekdays(DateTime startDate, int subtractDays)
+        {
+            for (int i = 0; i < subtractDays; i++)
+            {
+                do{ startDate = startDate.AddDays(-1); } 
+                while (startDate.DayOfWeek == DayOfWeek.Saturday || startDate.DayOfWeek == DayOfWeek.Sunday);
+            }
+            return startDate;
+        }
+
+        private void Debug(String message)
+        {
+            if (IsDebug) Print(message);
+        }
 
         protected override void OnBarUpdate()
-		{
-
+        {
             // Work only with the second bar series
-			if (BarsInProgress != 1)
+            if (BarsInProgress != 1)
             {
                 return;
             }
-            
+
             // Clear out stuff if first bar of session
             if (Bars.IsFirstBarOfSession)
             {
@@ -205,9 +239,15 @@ namespace NinjaTrader.NinjaScript.Indicators.Gemify
             // Get current time and use that to calculate today's OR Start/End times
             DateTime now = Times[1][0]; // Times[1] based time - could be seconds or minutes (depending on whether OpeningRange is enabled)
 
-            if (!PlotHistoricalIBs && now < HistoricalIBThreshold)
+            if (!PlotHistoricalIBs && now < dtCurrentIBStart)
             {
-                Debug("Skipping historical bar " + now + ". Waiting for " + HistoricalIBThreshold);
+                Debug("Current IB only. Skipping historical bar " + now + ". Waiting for " + dtCurrentIBStart);
+                return;
+            }
+
+            if (PlotHistoricalIBs && now < dtHistoricalIBStart)
+            {
+                Debug("Skipping historical bar " + now + ". Waiting for " + dtHistoricalIBStart);
                 return;
             }
 
@@ -241,14 +281,14 @@ namespace NinjaTrader.NinjaScript.Indicators.Gemify
             _ibComplete = IBStartBar != -1 && now > EndTime;
 
             // Calculate highest and lowest prices if current time is between Start and End
-            if (!_ibComplete && StartTime < now &&  now <= EndTime)
-			{                
-				// Keep track of the bar# (of the 1-minute series)
-				// when the IB started. We'll use this later to
-				// display the range text.
-				IBStartBar = IBStartBar == -1 ? CurrentBars[0] : IBStartBar;
-				
-				// Calculate the Highest and Lowest prices of the IB
+            if (!_ibComplete && StartTime < now && now <= EndTime)
+            {
+                // Keep track of the bar# (of the 1-minute series)
+                // when the IB started. We'll use this later to
+                // display the range text.
+                IBStartBar = IBStartBar == -1 ? CurrentBars[0] : IBStartBar;
+
+                // Calculate the Highest and Lowest prices of the IB
                 _ibHigh = Math.Max(_ibHigh, High[0]);
                 _ibLow = Math.Min(_ibLow, Low[0]);
                 _sessMid = Instrument.MasterInstrument.RoundToTickSize((_ibHigh + _ibLow) / 2.0);
@@ -261,8 +301,8 @@ namespace NinjaTrader.NinjaScript.Indicators.Gemify
             // If OR calculation is NOT complete and we're still within the OR timeframe
             if (!_orComplete && StartTime < now && now <= EndTime)
             {
-                Debug("Calculating Opening Range.");                                
-                
+                Debug("Calculating Opening Range.");
+
                 // Calculate the Highest and Lowest prices of the OR
                 _orHigh = Math.Max(_orHigh, High[0]);
                 _orLow = Math.Min(_orLow, Low[0]);
@@ -278,26 +318,30 @@ namespace NinjaTrader.NinjaScript.Indicators.Gemify
             //    - we have an Initial Balance, and
             //    - the session is still open, and
             //	  - the IB high/low has changed (compare prev state - prevents unnecessary drawing cycles)
-            if (_ibHigh > double.MinValue && _ibLow < double.MaxValue && 
-				now <= TodaySessionEndTime && 
-				(IBHighState != _ibHigh || IBLowState != _ibLow))
-			{
+            if (_ibHigh > double.MinValue && _ibLow < double.MaxValue &&
+                now <= TodaySessionEndTime &&
+                (IBHighState != _ibHigh || IBLowState != _ibLow))
+            {
 
-                SetZOrder(-1);
+                if (DisplayMode == IBDisplayModeEnum.FULL)
+                {
+                    SetZOrder(-1);
 
-                // Draw the IB range for the entire session
-                Draw.Rectangle(this, "gemifyIB_IB_Session" + tag, false, NTStartTime, _ibHigh, TodaySessionEndTime, _ibLow, IBFillColor, IBFillColor, IBFillOpacity);
+                    // Draw the IB range for the entire session
+                    Draw.Rectangle(this, "gemifyIB_IB_Session" + tag, false, NTStartTime, _ibHigh, TodaySessionEndTime, _ibLow, IBFillColor, IBFillColor, IBFillOpacity);
 
-				// Highlight IB Period if desired
-				if (HighlightIBPeriod)
-				{
-					Draw.Rectangle(this, "gemifyIB_IB" + tag, false, NTStartTime, _ibHigh, EndTime, _ibLow, IBHighlightColor, IBHighlightColor, IBHighlightOpacity);
-				}
+                    // Highlight IB Period if desired
+                    if (HighlightIBPeriod)
+                    {
+                        Draw.Rectangle(this, "gemifyIB_IB" + tag, false, NTStartTime, _ibHigh, EndTime, _ibLow, IBHighlightColor, IBHighlightColor, IBHighlightOpacity);
+                    }
+                }
 
-				// Save IB high/low state for comparing during the next update
-				IBHighState = _ibHigh;
-				IBLowState = _ibLow;
-			}
+                // Save IB high/low state for comparing during the next update
+                IBHighState = _ibHigh;
+                IBLowState = _ibLow;
+            }
+
 
             // Calculate and display IB range if desired
             if (DisplayIBRange)
@@ -313,51 +357,76 @@ namespace NinjaTrader.NinjaScript.Indicators.Gemify
                 double medianRange = CalculateMedian(Ranges);
                 Debug("Median range: " + medianRange);
 
-                double y = _ibHigh + (2 * Instrument.MasterInstrument.TickSize);
-                SetZOrder(int.MaxValue);
-
-                if (!_ibComplete)
+                if (DisplayMode == IBDisplayModeEnum.FULL)
                 {
-                    Debug("Developing IB...");
-                    TimeSpan IBDuration = EndTime - StartTime;
-                    TimeSpan Elapsed = now - StartTime;
-                    double Progress = (double)Elapsed.Ticks / (double)IBDuration.Ticks;
-                    Debug("Percentage complete: " + Progress);
-                    Draw.Text(this, "gemifyIB_IBR" + tag, false, "IB Forming (" + Progress.ToString("P", CultureInfo.InvariantCulture) + "). Current Range: " + range.ToString() + ", Median: " + String.Format("{0:0.0#}", medianRange), NTStartTime, y, 10, TextColor, TextFont, TextAlignment.Left, null, null, 100);
-                    Debug("Done drawing progress text.");
+                    double y = _ibHigh + (2 * Instrument.MasterInstrument.TickSize);
+                    SetZOrder(int.MaxValue);
+
+                    if (!_ibComplete)
+                    {
+                        Debug("Developing IB...");
+                        TimeSpan IBDuration = EndTime - StartTime;
+                        TimeSpan Elapsed = now - StartTime;
+                        double Progress = (double)Elapsed.Ticks / (double)IBDuration.Ticks;
+                        Debug("Percentage complete: " + Progress);
+                        Draw.Text(this, "gemifyIB_IBR" + tag, false, "IB Forming (" + Progress.ToString("P", CultureInfo.InvariantCulture) + "). Current Range: " + range.ToString() + ", Median: " + String.Format("{0:0.0#}", medianRange), NTStartTime, y, 10, TextColor, TextFont, TextAlignment.Left, null, null, 100);
+                        Debug("Done drawing progress text.");
+                    }
+                    else
+                    {
+                        Debug("Time: " + now + ", Range is : " + range);
+                        Debug("IB Complete...");
+                        Draw.Text(this, "gemifyIB_IBR" + tag, false, "IB Range: " + range.ToString() + ", Median: " + String.Format("{0:0.0#}", medianRange), NTStartTime, y, 10, TextColor, TextFont, TextAlignment.Left, null, null, 100);
+                        Debug("Done drawing range text.");
+                    }
+
+
+                    if (DisplayOR && _orComplete)
+                    {
+                        Draw.Text(this, "gemifyIB_ORHText" + tag, false, "ORH", NTStartTime, (_orHigh + Instrument.MasterInstrument.TickSize), 10, ORLineColor, TextFont, TextAlignment.Left, null, null, 100);
+                        Draw.Line(this, "gemifyIB_ORHigh" + tag, false, NTStartTime, _orHigh, TodaySessionEndTime, _orHigh, ORLineColor, DashStyleHelper.DashDot, 1);
+                        Draw.Line(this, "gemifyIB_ORLow" + tag, false, NTStartTime, _orLow, TodaySessionEndTime, _orLow, ORLineColor, DashStyleHelper.DashDot, 1);
+                        Draw.Text(this, "gemifyIB_ORLText" + tag, false, "ORL", NTStartTime, (_orLow - Instrument.MasterInstrument.TickSize), -10, ORLineColor, TextFont, TextAlignment.Left, null, null, 100);
+                    }
+
+                    if (DisplaySessionMid)
+                    {
+                        // Draw Session Mid
+                        Draw.Text(this, "gemifyIB_SessionMidText", false, "Session Mid", NTStartTime, (_sessionMiddle + Instrument.MasterInstrument.TickSize), 10, SessionMidColor, TextFont, TextAlignment.Left, null, null, 100);
+                        Draw.Line(this, "gemifyIB_SessionMid", false, NTStartTime, _sessionMiddle, TodaySessionEndTime, _sessionMiddle, SessionMidColor, DashStyleHelper.DashDotDot, 1);
+                    }
                 }
-                else
+                else // Minimal mode
                 {
-                    Debug("Time: " + now + ", Range is : " + range);
-                    Debug("IB Complete...");
-                    Draw.Text(this, "gemifyIB_IBR" + tag, false, "IB Range: " + range.ToString() + ", Median: " + String.Format("{0:0.0#}", medianRange), NTStartTime, y, 10, TextColor, TextFont, TextAlignment.Left, null, null, 100);
-                    Debug("Done drawing range text.");
+                    if (!_ibComplete)
+                    {
+                        Debug("Developing IB...");
+                        TimeSpan IBDuration = EndTime - StartTime;
+                        TimeSpan Elapsed = now - StartTime;
+                        double Progress = (double)Elapsed.Ticks / (double)IBDuration.Ticks;
+                        Debug("Percentage complete: " + Progress);
+                        Draw.TextFixed(this, "gemifyIB_IBR" + tag, "IB Forming (" + Progress.ToString("P", CultureInfo.InvariantCulture) + "). Current Range: " + range.ToString(), MarkersOnlyIBRangeTextPosition, MarginMarkerTextBrush, TextFont, MarginMarkerBorderBrush, MarginMarkerFillBrush, 70);
+                        Debug("Done drawing progress text.");
+                    }
+                    else
+                    {
+                        Debug("Time: " + now + ", Range is : " + range);
+                        Debug("IB Complete...");
+                        Draw.TextFixed(this, "gemifyIB_IBR" + tag, "IB Range: " + range.ToString(), MarkersOnlyIBRangeTextPosition, MarginMarkerTextBrush, TextFont, MarginMarkerBorderBrush, MarginMarkerFillBrush, 70);
+                        Debug("Done drawing range text.");
+                    }
                 }
             }
 
-            if (DisplayOR && _orComplete)
-            {
-                Draw.Text(this, "gemifyIB_ORHText" + tag, false, "ORH", NTStartTime, (_orHigh + Instrument.MasterInstrument.TickSize), 10, ORLineColor, TextFont, TextAlignment.Left, null, null, 100);
-                Draw.Line(this, "gemifyIB_ORHigh" + tag, false, NTStartTime, _orHigh, TodaySessionEndTime, _orHigh, ORLineColor, DashStyleHelper.DashDot, 1);
-                Draw.Line(this, "gemifyIB_ORLow" + tag, false, NTStartTime, _orLow, TodaySessionEndTime, _orLow, ORLineColor, DashStyleHelper.DashDot, 1);
-                Draw.Text(this, "gemifyIB_ORLText" + tag, false, "ORL", NTStartTime, (_orLow - Instrument.MasterInstrument.TickSize), -10, ORLineColor, TextFont, TextAlignment.Left, null, null, 100);
-            }
-
-            if (DisplaySessionMid)
-            {
-                // Draw Session Mid
-                Draw.Text(this, "gemifyIB_SessionMidText", false, "Session Mid", NTStartTime, (_sessionMiddle + Instrument.MasterInstrument.TickSize), 10, SessionMidColor, TextFont, TextAlignment.Left, null, null, 100);
-                Draw.Line(this, "gemifyIB_SessionMid", false, NTStartTime, _sessionMiddle, TodaySessionEndTime, _sessionMiddle, SessionMidColor, DashStyleHelper.DashDotDot, 1);
-            }
 
             // Draw Extensions if IB is complete
             if (_ibComplete)
-			{
+            {
                 // Calculate range for extensions
                 double range = Instrument.MasterInstrument.RoundToTickSize(_ibHigh - _ibLow);
 
                 int barsAgo = (CurrentBars[0] - IBStartBar);
-                
+
                 double offset = range * (IBX1Multiple - 1.0);
                 Debug("IBX1 - Range : " + range + ", offset : " + offset);
 
@@ -376,35 +445,38 @@ namespace NinjaTrader.NinjaScript.Indicators.Gemify
                 _ibx3Upper = _ibHigh + offset;
                 _ibx3Lower = _ibLow - offset;
 
-                if (DisplayIBX1)
+                if (DisplayMode == IBDisplayModeEnum.FULL)
                 {
-                    Draw.Line(this, "gemifyIB_IBX1Up" + tag, false, NTStartTime, _ibx1Upper, TodaySessionEndTime, _ibx1Upper, IBX1Color, IBX1DashStyle, IBX1Width);
-                    Draw.Line(this, "gemifyIB_IBX1Down" + tag, false, NTStartTime, _ibx1Lower, TodaySessionEndTime, _ibx1Lower, IBX1Color, IBX1DashStyle, IBX1Width);
+                    if (DisplayIBX1)
+                    {
+                        Draw.Line(this, "gemifyIB_IBX1Up" + tag, false, NTStartTime, _ibx1Upper, TodaySessionEndTime, _ibx1Upper, IBX1Color, IBX1DashStyle, IBX1Width);
+                        Draw.Line(this, "gemifyIB_IBX1Down" + tag, false, NTStartTime, _ibx1Lower, TodaySessionEndTime, _ibx1Lower, IBX1Color, IBX1DashStyle, IBX1Width);
 
-                    String multiple = String.Format("{0:0.0#}", IBX1Multiple);
-                    Draw.Text(this, "gemifyIB_IBX1UpText" + tag, false, "IBx" + multiple, NTStartTime, (_ibx1Upper + Instrument.MasterInstrument.TickSize), 10, IBX1Color, TextFont, TextAlignment.Left, null, null, 100);
-                    Draw.Text(this, "gemifyIB_IBX1DownText" + tag, false, "IBx" + multiple, NTStartTime, (_ibx1Lower + Instrument.MasterInstrument.TickSize), 10, IBX1Color, TextFont, TextAlignment.Left, null, null, 100);
-                }
+                        String multiple = String.Format("{0:0.0#}", IBX1Multiple);
+                        Draw.Text(this, "gemifyIB_IBX1UpText" + tag, false, "IBx" + multiple, NTStartTime, (_ibx1Upper + Instrument.MasterInstrument.TickSize), 10, IBX1Color, TextFont, TextAlignment.Left, null, null, 100);
+                        Draw.Text(this, "gemifyIB_IBX1DownText" + tag, false, "IBx" + multiple, NTStartTime, (_ibx1Lower + Instrument.MasterInstrument.TickSize), 10, IBX1Color, TextFont, TextAlignment.Left, null, null, 100);
+                    }
 
-                if (DisplayIBX2)
-                {
-                    Draw.Line(this, "gemifyIB_IBX2Up" + tag, false, NTStartTime, _ibx2Upper, TodaySessionEndTime, _ibx2Upper, IBX2Color, IBX2DashStyle, IBX2Width);
-                    Draw.Line(this, "gemifyIB_IBX2Down" + tag, false, NTStartTime, _ibx2Lower, TodaySessionEndTime, _ibx2Lower, IBX2Color, IBX2DashStyle, IBX2Width);
+                    if (DisplayIBX2)
+                    {
+                        Draw.Line(this, "gemifyIB_IBX2Up" + tag, false, NTStartTime, _ibx2Upper, TodaySessionEndTime, _ibx2Upper, IBX2Color, IBX2DashStyle, IBX2Width);
+                        Draw.Line(this, "gemifyIB_IBX2Down" + tag, false, NTStartTime, _ibx2Lower, TodaySessionEndTime, _ibx2Lower, IBX2Color, IBX2DashStyle, IBX2Width);
 
-                    String multiple = String.Format("{0:0.0#}", IBX2Multiple);
-                    Draw.Text(this, "gemifyIB_IBX2UpText" + tag, false, "IBx" + multiple, NTStartTime, (_ibx2Upper + Instrument.MasterInstrument.TickSize), 10, IBX2Color, TextFont, TextAlignment.Left, null, null, 100);
-                    Draw.Text(this, "gemifyIB_IBX2DownText" + tag, false, "IBx" + multiple, NTStartTime, (_ibx2Lower + Instrument.MasterInstrument.TickSize), 10, IBX2Color, TextFont, TextAlignment.Left, null, null, 100);
+                        String multiple = String.Format("{0:0.0#}", IBX2Multiple);
+                        Draw.Text(this, "gemifyIB_IBX2UpText" + tag, false, "IBx" + multiple, NTStartTime, (_ibx2Upper + Instrument.MasterInstrument.TickSize), 10, IBX2Color, TextFont, TextAlignment.Left, null, null, 100);
+                        Draw.Text(this, "gemifyIB_IBX2DownText" + tag, false, "IBx" + multiple, NTStartTime, (_ibx2Lower + Instrument.MasterInstrument.TickSize), 10, IBX2Color, TextFont, TextAlignment.Left, null, null, 100);
 
-                }
+                    }
 
-                if (DisplayIBX3)
-                {
-                    Draw.Line(this, "gemifyIB_IB31Up" + tag, false, NTStartTime, _ibx3Upper, TodaySessionEndTime, _ibx3Upper, IBX3Color, IBX3DashStyle, IBX3Width);
-                    Draw.Line(this, "gemifyIB_IB31Down" + tag, false, NTStartTime, _ibx3Lower, TodaySessionEndTime, _ibx3Lower, IBX3Color, IBX3DashStyle, IBX3Width);
+                    if (DisplayIBX3)
+                    {
+                        Draw.Line(this, "gemifyIB_IB31Up" + tag, false, NTStartTime, _ibx3Upper, TodaySessionEndTime, _ibx3Upper, IBX3Color, IBX3DashStyle, IBX3Width);
+                        Draw.Line(this, "gemifyIB_IB31Down" + tag, false, NTStartTime, _ibx3Lower, TodaySessionEndTime, _ibx3Lower, IBX3Color, IBX3DashStyle, IBX3Width);
 
-                    String multiple = String.Format("{0:0.0#}", IBX3Multiple);
-                    Draw.Text(this, "gemifyIB_IBX3UpText" + tag, false, "IBx" + multiple, NTStartTime, (_ibx3Upper + Instrument.MasterInstrument.TickSize), 10, IBX3Color, TextFont, TextAlignment.Left, null, null, 100);
-                    Draw.Text(this, "gemifyIB_IBX3DownText" + tag, false, "IBx" + multiple, NTStartTime, (_ibx3Lower + Instrument.MasterInstrument.TickSize), 10, IBX3Color, TextFont, TextAlignment.Left, null, null, 100);
+                        String multiple = String.Format("{0:0.0#}", IBX3Multiple);
+                        Draw.Text(this, "gemifyIB_IBX3UpText" + tag, false, "IBx" + multiple, NTStartTime, (_ibx3Upper + Instrument.MasterInstrument.TickSize), 10, IBX3Color, TextFont, TextAlignment.Left, null, null, 100);
+                        Draw.Text(this, "gemifyIB_IBX3DownText" + tag, false, "IBx" + multiple, NTStartTime, (_ibx3Lower + Instrument.MasterInstrument.TickSize), 10, IBX3Color, TextFont, TextAlignment.Left, null, null, 100);
+                    }
                 }
             }
         }
@@ -414,8 +486,8 @@ namespace NinjaTrader.NinjaScript.Indicators.Gemify
             // Operates only on the secondary time series (minute)
             if (State == State.Historical || BarsInProgress != 1 || !DisplayMarginMarkers) return;
 
-            DrawText(chartScale, "IBH: " + _ibHigh, _ibHigh);
-            DrawText(chartScale, "IBL: " + _ibLow, _ibLow);
+            DrawText(chartScale, (_ibComplete ? "" : "...") + "IBH: " + _ibHigh, _ibHigh);
+            DrawText(chartScale, (_ibComplete ? "" : "...") + "IBL: " + _ibLow, _ibLow);
             DrawText(chartScale, "SessMid: " + _sessionMiddle, _sessionMiddle);
             if (DisplayOR && _orComplete)
             {
@@ -450,6 +522,7 @@ namespace NinjaTrader.NinjaScript.Indicators.Gemify
         {
             using (SharpDX.Direct2D1.Brush TextBrushDx = MarginMarkerTextBrush.ToDxBrush(RenderTarget))
             using (SharpDX.Direct2D1.Brush FillBrushDx = MarginMarkerFillBrush.ToDxBrush(RenderTarget))
+            using (SharpDX.Direct2D1.Brush DevelopingIBBrushDx = Brushes.DimGray.ToDxBrush(RenderTarget))
             using (SharpDX.Direct2D1.Brush BorderBrushDx = MarginMarkerBorderBrush.ToDxBrush(RenderTarget))
             {
                 SharpDX.DirectWrite.TextFormat textFormat = TextFont.ToDirectWriteTextFormat();
@@ -459,19 +532,19 @@ namespace NinjaTrader.NinjaScript.Indicators.Gemify
                 float textWidth = textLayout.Metrics.Width;
                 float textHeight = textLayout.Metrics.Height;
 
-                float x = (float)(ChartPanel.W - textWidth - (8+5));
+                float x = (float)(ChartPanel.W - textWidth - (8 + 5));
                 int priceCoordinate = chartScale.GetYByValue(Price);
                 float rectY = priceCoordinate - ((textHeight + 7) / (float)2.0);
                 float textY = priceCoordinate - (textHeight / (float)2.0);
 
                 SharpDX.Vector2 startPoint = new SharpDX.Vector2(x, rectY);
                 SharpDX.Vector2 upperTextPoint = new SharpDX.Vector2(startPoint.X + 4, textY);
-                SharpDX.Vector2 markerPoint = new SharpDX.Vector2(ChartPanel.W-markerTextLayout.Metrics.Width + 2, textY);
+                SharpDX.Vector2 markerPoint = new SharpDX.Vector2(ChartPanel.W - markerTextLayout.Metrics.Width + 2, textY);
 
                 SharpDX.RectangleF rect = new SharpDX.RectangleF(startPoint.X, startPoint.Y, textWidth + 8, textHeight + 6);
-                RenderTarget.FillRectangle(rect, FillBrushDx);
+                RenderTarget.FillRectangle(rect, _ibComplete ? FillBrushDx : DevelopingIBBrushDx);
                 RenderTarget.DrawRectangle(rect, BorderBrushDx, 1);
-                
+
                 RenderTarget.DrawTextLayout(markerPoint, markerTextLayout, BorderBrushDx, SharpDX.Direct2D1.DrawTextOptions.NoSnap);
 
                 RenderTarget.DrawTextLayout(upperTextPoint, textLayout, TextBrushDx, SharpDX.Direct2D1.DrawTextOptions.NoSnap);
@@ -502,16 +575,16 @@ namespace NinjaTrader.NinjaScript.Indicators.Gemify
 
             if (!PlotHistoricalIBs)
             {
-                RemoveGemifyIBDrawObjects();
+                RemoveDrawObjects();
             }
         }
 
-        private String GenerateTodayTag (DateTime now)
-		{
-			return "_" + now.Month + now.Day + now.Year;
+        private String GenerateTodayTag(DateTime now)
+        {
+            return "_" + now.Month + now.Day + now.Year;
         }
 
-        private double CalculateMedian (List<double> ranges)
+        private double CalculateMedian(List<double> ranges)
         {
             if (ranges.IsNullOrEmpty()) return 0;
 
@@ -521,21 +594,7 @@ namespace NinjaTrader.NinjaScript.Indicators.Gemify
             if (data.Length % 2 == 0)
                 return (data[data.Length / 2 - 1] + data[data.Length / 2]) / 2;
             else
-                return data[data.Length / 2];            
-        }
-
-        private void RemoveGemifyIBDrawObjects()
-        {
-            lock (DrawObjects)
-            {
-                foreach (var d in DrawObjects)
-                {
-                    if (d.Tag.StartsWith("gemifyIB"))
-                    {
-                        RemoveDrawObject(d.Tag);
-                    }
-                }
-            }
+                return data[data.Length / 2];
         }
 
         #region Properties
@@ -558,11 +617,25 @@ namespace NinjaTrader.NinjaScript.Indicators.Gemify
         { get; set; }
 
         // ----------- Options
-        [Display(Name = "Plot Historical IBs", Description = "Plot Historical IBs", Order = 50, GroupName = "Options")]
+        [Display(Name = "Display Mode", Description = "Full or Minimal mode", Order = 100, GroupName = "Display Mode")]
+        public IBDisplayModeEnum DisplayMode
+        { get; set; }
+
+        [Display(Name = "IB Range Text Position", Description = "IB Range Text Position", Order = 100, GroupName = "Minimal Mode Options")]
+        public TextPosition MarkersOnlyIBRangeTextPosition
+        { get; set; }
+
+
+        [Display(Name = "Plot Historical IBs", Description = "Plot Historical IBs", Order = 50, GroupName = "Full Mode Options")]
         public bool PlotHistoricalIBs
         { get; set; }
 
-        [Display(Name = "Highlight IB Period", Description = "Highlight IB Period", Order = 100, GroupName = "Options")]
+        [Range(0, 365)]
+        [Display(Name = "Max Historical IBs (days)", Description = "Number of Historical IBs to calculate (Max 365 days)", Order = 75, GroupName = "Full Mode Options")]
+        public int HistoricalIBLookback
+        { get; set; }
+
+        [Display(Name = "Highlight IB Period", Description = "Highlight IB Period", Order = 100, GroupName = "Full Mode Options")]
         public bool HighlightIBPeriod
         { get; set; }
 
@@ -579,10 +652,10 @@ namespace NinjaTrader.NinjaScript.Indicators.Gemify
         public bool DisplaySessionMid
         { get; set; }
 
-        [Display(Name = "Price Markers on Margin", Description = "Display Markers on the Right Margin", Order = 500, GroupName = "Options")]
+        [Display(Name = "Price Markers", Description = "Display Markers on the Right Margin", Order = 500, GroupName = "Options")]
         public bool DisplayMarginMarkers
         { get; set; }
-        
+
 
 
         // ----------- IB Extensions
@@ -592,7 +665,7 @@ namespace NinjaTrader.NinjaScript.Indicators.Gemify
         { get; set; }
 
         [NinjaScriptProperty]
-		[Range(1.0, double.MaxValue)]
+        [Range(1.0, double.MaxValue)]
         [Display(Name = "IB Extension Multiple", Description = "IB Extension Multiple", Order = 200, GroupName = "IB Extension 1")]
         public double IBX1Multiple
         { get; set; }
@@ -615,7 +688,7 @@ namespace NinjaTrader.NinjaScript.Indicators.Gemify
         { get; set; }
 
         [XmlIgnore]
-        [Range(1,10)]
+        [Range(1, 10)]
         [Display(Name = "IB Extension Line Thickness", Description = "IB Extension line thickness", Order = 500, GroupName = "IB Extension 1")]
         public int IBX1Width
         { get; set; }
@@ -693,22 +766,22 @@ namespace NinjaTrader.NinjaScript.Indicators.Gemify
 
         // ----------- Colors
 
-		[XmlIgnore]
-		[Display(Name="Initial Balance Fill Color", Description="Initial Balance fill color", Order=100, GroupName = "Colors")]
-		public Brush IBFillColor
-		{ get; set; }
+        [XmlIgnore]
+        [Display(Name = "Initial Balance Fill Color", Description = "Initial Balance fill color", Order = 100, GroupName = "Colors")]
+        public Brush IBFillColor
+        { get; set; }
 
-		[Browsable(false)]
-		public string IBFillColorSerializable
-		{
-			get { return Serialize.BrushToString(IBFillColor); }
-			set { IBFillColor = Serialize.StringToBrush(value); }
-		}			
+        [Browsable(false)]
+        public string IBFillColorSerializable
+        {
+            get { return Serialize.BrushToString(IBFillColor); }
+            set { IBFillColor = Serialize.StringToBrush(value); }
+        }
 
-		[Range(1, 100)]
-		[Display(Name="Opacity", Description="Opacity of Initial Balance", Order=200, GroupName = "Colors")]
-		public int IBFillOpacity
-		{ get; set; }
+        [Range(1, 100)]
+        [Display(Name = "Opacity", Description = "Opacity of Initial Balance", Order = 200, GroupName = "Colors")]
+        public int IBFillOpacity
+        { get; set; }
 
         [XmlIgnore]
         [Display(Name = "Initial Balance Hightlight Color", Description = "Initial Balance highlight color", Order = 300, GroupName = "Colors")]
