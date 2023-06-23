@@ -11,7 +11,6 @@ using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Globalization;
 using System.Windows;
-using System.Windows.Documents;
 using System.Windows.Media;
 using System.Xml.Serialization;
 #endregion
