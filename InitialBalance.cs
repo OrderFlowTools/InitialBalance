@@ -1,5 +1,6 @@
 #region Using declarations
 using NinjaTrader.Cbi;
+using NinjaTrader.Custom.Indicators.Gemify.Shared;
 using NinjaTrader.Data;
 using NinjaTrader.Gui;
 using NinjaTrader.Gui.Chart;
@@ -34,7 +35,6 @@ namespace NinjaTrader.NinjaScript.Indicators.Gemify
 
         private double _ibHigh;
         private double _ibLow;
-        private double _sessMid;
 
         private double IBHighState;
         private double IBLowState;
@@ -119,6 +119,7 @@ namespace NinjaTrader.NinjaScript.Indicators.Gemify
 
                 DisplayIBRange = true;
                 HighlightIBPeriod = true;
+                HighlightSessionPeriod = true;
                 DisplayMarginMarkers = true;
 
                 IBStartBar = -1;
@@ -163,7 +164,6 @@ namespace NinjaTrader.NinjaScript.Indicators.Gemify
                 MarginMarkerTextBrush = Brushes.White;
                 MarginMarkerFillBrush = Brushes.Maroon;
                 MarginMarkerBorderBrush = Brushes.AliceBlue;
-
             }
             else if (State == State.Configure)
             {
@@ -272,6 +272,7 @@ namespace NinjaTrader.NinjaScript.Indicators.Gemify
             _sessionHigh = Math.Max(_sessionHigh, High[0]);
             _sessionLow = Math.Min(_sessionLow, Low[0]);
             _sessionMiddle = Instrument.MasterInstrument.RoundToTickSize((_sessionHigh + _sessionLow) / 2.0);
+
             Debug("SessionMid is " + _sessionMiddle);
 
             // Flag that indicates that IB is complete.
@@ -290,7 +291,6 @@ namespace NinjaTrader.NinjaScript.Indicators.Gemify
                 // Calculate the Highest and Lowest prices of the IB
                 _ibHigh = Math.Max(_ibHigh, High[0]);
                 _ibLow = Math.Min(_ibLow, Low[0]);
-                _sessMid = Instrument.MasterInstrument.RoundToTickSize((_ibHigh + _ibLow) / 2.0);
 
                 Debug("Time: " + now + ". ORH: " + _ibHigh + ", ORL: " + _ibLow);
             }
@@ -326,8 +326,11 @@ namespace NinjaTrader.NinjaScript.Indicators.Gemify
                 {
                     SetZOrder(-1);
 
-                    // Draw the IB range for the entire session
-                    Draw.Rectangle(this, "gemifyIB_IB_Session" + tag, false, NTStartTime, _ibHigh, TodaySessionEndTime, _ibLow, IBFillColor, IBFillColor, IBFillOpacity);
+                    if (HighlightSessionPeriod)
+                    {
+                        // Draw the IB range for the entire session
+                        Draw.Rectangle(this, "gemifyIB_IB_Session" + tag, false, NTStartTime, _ibHigh, TodaySessionEndTime, _ibLow, IBFillColor, IBFillColor, IBFillOpacity);
+                    }
 
                     // Highlight IB Period if desired
                     if (HighlightIBPeriod)
@@ -392,7 +395,7 @@ namespace NinjaTrader.NinjaScript.Indicators.Gemify
                     {
                         // Draw Session Mid
                         Draw.Text(this, "gemifyIB_SessionMidText", false, "Session Mid", NTStartTime, (_sessionMiddle + Instrument.MasterInstrument.TickSize), 10, SessionMidColor, TextFont, TextAlignment.Left, null, null, 100);
-                        Draw.Line(this, "gemifyIB_SessionMid", false, NTStartTime, _sessionMiddle, TodaySessionEndTime, _sessionMiddle, SessionMidColor, DashStyleHelper.DashDotDot, 1);
+                        Draw.Line(this, "gemifyIB_SessionMid", false, NTStartTime, _sessionMiddle, TodaySessionEndTime, _sessionMiddle, SessionMidColor, DashStyleHelper.DashDotDot, 2);
                     }
                 }
                 else // Minimal mode
@@ -636,6 +639,10 @@ namespace NinjaTrader.NinjaScript.Indicators.Gemify
 
         [Display(Name = "Highlight IB Period", Description = "Highlight IB Period", Order = 100, GroupName = "Full Mode Options")]
         public bool HighlightIBPeriod
+        { get; set; }
+
+        [Display(Name = "Highlight Session", Description = "Highlight Session", Order = 150, GroupName = "Full Mode Options")]
+        public bool HighlightSessionPeriod
         { get; set; }
 
 
@@ -926,7 +933,7 @@ namespace NinjaTrader.NinjaScript.Indicators.Gemify
         [XmlIgnore()]
         public double SessionMid
         {
-            get { return _sessMid; }
+            get { return _sessionMiddle; }
         }
 
         [Browsable(false)]
