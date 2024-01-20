@@ -175,7 +175,8 @@ namespace NinjaTrader.NinjaScript.Indicators.Gemify
                     // A single-second series will be highly accurate on the UI, but CPU expensive.
 
                     // The values that matter - IBH, IBL, etc will be accurate regardless.
-                    AddDataSeries(Instrument.FullName, new BarsPeriod() { BarsPeriodType=BarsPeriodType.Second, Value=30 }, "CME US Index Futures RTH", true);
+                    // AddDataSeries(Instrument.FullName, new BarsPeriod() { BarsPeriodType=BarsPeriodType.Second, Value=30 }, "CME US Index Futures RTH", true);
+                    AddDataSeries(Instrument.FullName, new BarsPeriod() { BarsPeriodType = BarsPeriodType.Second, Value = 30 }, "CME US Index Futures ETH", true);
                 }
                 else
                 {
@@ -344,9 +345,8 @@ namespace NinjaTrader.NinjaScript.Indicators.Gemify
                 IBLowState = _ibLow;
             }
 
-
             // Calculate and display IB range if desired
-            if (DisplayIBRange)
+            if (now <= TodaySessionEndTime && DisplayIBRange)
             {
                 double range = Instrument.MasterInstrument.RoundToTickSize(_ibHigh - _ibLow);
                 Debug("Time: " + now + ", Range is : " + range);
