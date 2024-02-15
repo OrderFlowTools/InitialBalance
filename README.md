@@ -2,11 +2,12 @@
 
 Simple IB+OR indicator for Ninjatrader v8.
 
-- Configurable start / end times for the Initial Balance period (defaults to 9:30AM-10:30AM). 
-- Can optionally draw up to three customizable IB extensions (defaults are 1.5x, 2x and 3x).
+- Configurable start / durations for the Initial Balance period (defaults to 9:30AM-10:30AM).
+- Configurable duration for the Opening Range (defaults to 30 seconds)
+- Configurable duration for the session (defaults to 6:30 hours)
+- Can optionally draw up to four customizable IB extensions (defaults are 1.25x, 1.5x, 2x and 3x).
 - Displays Current IB Range and historical Median Range (based on how many days are loaded on chart)
 - Displays Session Mid
-- Displays Opening Range (OR) (30 seconds)
 - Optionally display historical IBs
 
 _Note: All time configuration values are considered local time._
