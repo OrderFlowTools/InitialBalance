@@ -2,6 +2,7 @@
 using NinjaTrader.Cbi;
 using NinjaTrader.Gui;
 using System;
+using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using InitialBalance = NinjaTrader.NinjaScript.Indicators.Gemify.InitialBalance;
 #endregion
@@ -43,11 +44,15 @@ namespace NinjaTrader.NinjaScript.Strategies
 
                 // ================= INITIAL BALANCE : README ==================
                 // Default Initial Balance set between 9:30 to 10:30 AM EST
-                IBStartTime = DateTime.Parse("09:30", System.Globalization.CultureInfo.InvariantCulture);
-                IBEndTime = DateTime.Parse("10:30", System.Globalization.CultureInfo.InvariantCulture);
-				// Default extension ratios
-				IBX1Multiple = 1.5;
-                IBX2Multiple = 2.0;
+                SessionStartTime = DateTime.Parse("09:30", System.Globalization.CultureInfo.InvariantCulture);
+                SessionDuration = new TimeSpan(6, 30, 0); // 6 hours, 30 mins, 0 seconds
+                IBDuration = new TimeSpan(1, 0, 0); // 1 hour, 0 minutes, 0 seconds
+                ORDuration = new TimeSpan(0, 0, 30); // 0 hours, 0 mins, 30 seconds
+
+                // Default extension ratios
+                IBX1Multiple = 1.25;
+                IBX2Multiple = 1.5;
+                IBX3Multiple = 2.0;
                 IBX3Multiple = 3.0;
 
             }
@@ -63,7 +68,7 @@ namespace NinjaTrader.NinjaScript.Strategies
 			{
                 // ================= INITIAL BALANCE : README ==================
 				// This is the Initial Balance indicator instance we'll use in the strategy
-                initialBalanceIndicator = InitialBalance(Close, IBStartTime, IBEndTime, IBX1Multiple, IBX2Multiple, IBX3Multiple);
+                initialBalanceIndicator = InitialBalance(Close, SessionStartTime, SessionDuration, IBDuration, ORDuration, IBX1Multiple, IBX2Multiple, IBX3Multiple, IBX4Multiple);
 			}
 		}
 
@@ -146,32 +151,68 @@ namespace NinjaTrader.NinjaScript.Strategies
 
         }
 
-        [NinjaScriptProperty]
-        [PropertyEditor("NinjaTrader.Gui.Tools.TimeEditorKey")]
-        [Display(Name = "Initial Balance Begin", Description = "Initial balance begin time", Order = 100, GroupName = "Parameters")]
-        public DateTime IBStartTime
-        { get; set; }
+
 
         [NinjaScriptProperty]
         [PropertyEditor("NinjaTrader.Gui.Tools.TimeEditorKey")]
-        [Display(Name = "Initial Balance End", Description = "Initial balance end time", Order = 200, GroupName = "Parameters")]
-        public DateTime IBEndTime
+        [Display(Name = "Session Begin", Description = "Session begin time", Order = 100, GroupName = "Parameters")]
+        public DateTime SessionStartTime
         { get; set; }
 
         [NinjaScriptProperty]
-        [Display(Name = "IB Ext.1 Multiple", Description = "Initial Balance Extension 1 Multiple", Order = 300, GroupName = "Parameters")]
+        [Display(Name = "Session Duration (hh:mm:ss)", Description = "Session Duration (hh:mm:ss)", Order = 200, GroupName = "Parameters")]
+        public TimeSpan SessionDuration
+        { get; set; }
+
+        [Browsable(false)]
+        public String SessionDurationSerialize
+        {
+            get { return SessionDuration.ToString(); }
+            set { SessionDuration = TimeSpan.Parse(value); }
+        }
+
+        [NinjaScriptProperty]
+        [Display(Name = "Initial Balance Duration (hh:mm:ss)", Description = "Initial Balance Duration (hh:mm:ss)", Order = 300, GroupName = "Parameters")]
+        public TimeSpan IBDuration
+        { get; set; }
+
+        [Browsable(false)]
+        public String IBDurationSerialize
+        {
+            get { return IBDuration.ToString(); }
+            set { IBDuration = TimeSpan.Parse(value); }
+        }
+
+        [NinjaScriptProperty]
+        [Display(Name = "Opening Range Duration (hh:mm:ss)", Description = "Opening Range Duration (hh:mm:ss)", Order = 400, GroupName = "Parameters")]
+        public TimeSpan ORDuration
+        { get; set; }
+
+        [Browsable(false)]
+        public String ORDurationSerialize
+        {
+            get { return ORDuration.ToString(); }
+            set { ORDuration = TimeSpan.Parse(value); }
+        }
+
+        [NinjaScriptProperty]
+        [Display(Name = "IB Ext.1 Multiple", Description = "Initial Balance Extension 1 Multiple", Order = 500, GroupName = "Parameters")]
         public double IBX1Multiple
         { get; set; }
 
         [NinjaScriptProperty]
-        [Display(Name = "IB Ext.1 Multiple", Description = "Initial Balance Extension 2 Multiple", Order = 400, GroupName = "Parameters")]
+        [Display(Name = "IB Ext.2 Multiple", Description = "Initial Balance Extension 2 Multiple", Order = 600, GroupName = "Parameters")]
         public double IBX2Multiple
         { get; set; }
 
         [NinjaScriptProperty]
-        [Display(Name = "IB Ext.1 Multiple", Description = "Initial Balance Extension 3 Multiple", Order = 500, GroupName = "Parameters")]
+        [Display(Name = "IB Ext.3 Multiple", Description = "Initial Balance Extension 3 Multiple", Order = 700, GroupName = "Parameters")]
         public double IBX3Multiple
         { get; set; }
 
+        [NinjaScriptProperty]
+        [Display(Name = "IB Ext.4 Multiple", Description = "Initial Balance Extension 4 Multiple", Order = 800, GroupName = "Parameters")]
+        public double IBX4Multiple
+        { get; set; }
     }
 }
